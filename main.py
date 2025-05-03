@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 import os
 import re
 
-app = Flask(__name__)
+
+app = Flask(__name__, static_folder='frontend/build', static_url_path='')
 
 # Setup CORS if available
 if cors_available:
@@ -1030,5 +1031,28 @@ def calculate_grades():
     except Exception as e:
         return handle_error(e)
 
+from flask import Flask, send_from_directory
+
+@app.route('/')
+def serve():
+    # 获取访问者的 IP 地址和请求的 URL
+    visitor_ip = request.remote_addr
+    user_agent = request.headers.get('User-Agent')
+    print(f"Visitor IP: {visitor_ip}, User Agent: {user_agent}")
+    print(f"Request URL: {request.url}")
+    
+    # 返回静态文件
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    file_path = os.path.join(app.static_folder, path)
+    if os.path.exists(file_path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
+
+
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)

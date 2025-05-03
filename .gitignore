@@ -1,10 +1,11 @@
 # 忽略虚拟环境
 venv/
-env/
+myenv/
 
 # Python 缓存
 __pycache__/
 *.py[cod]
+
 
 # 日志
 *.log
@@ -15,3 +16,4 @@ __pycache__/
 
 # 环境变量文件（如果有）
 .env
+

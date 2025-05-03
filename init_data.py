@@ -5,7 +5,7 @@ from datetime import datetime
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': '123456',
+    'password': '3149550729_AnF',
     'database': 'course_selection_system'
 }
 
