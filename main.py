@@ -459,10 +459,11 @@ def get_teacher_semesters(staff_id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-            SELECT DISTINCT semester 
-            FROM class
-            WHERE staff_id = %s
-            ORDER BY semester DESC
+            SELECT DISTINCT s.semester_id as semester, s.is_current, s.created_at
+            FROM semester s
+            JOIN class c ON s.semester_id = c.semester
+            WHERE c.staff_id = %s
+            ORDER BY s.semester_id DESC
         ''', [staff_id])
         semesters = cursor.fetchall()
         cursor.close()
@@ -518,6 +519,27 @@ def update_grades():
         cursor = conn.cursor(dictionary=True)
         
         for grade in data['grades']:
+            # 验证分数在有效范围内
+            usual_score = grade.get('usual_score')
+            final_score = grade.get('final_score')
+            
+            # 分数检查
+            if usual_score is not None:
+                try:
+                    usual_score = float(usual_score)
+                    if usual_score < 0 or usual_score > 100:
+                        return jsonify({"success": False, "message": f"学生 {grade['student_id']} 的平时成绩必须在0-100之间"}), 400
+                except (ValueError, TypeError):
+                    return jsonify({"success": False, "message": f"学生 {grade['student_id']} 的平时成绩必须是有效数字"}), 400
+            
+            if final_score is not None:
+                try:
+                    final_score = float(final_score)
+                    if final_score < 0 or final_score > 100:
+                        return jsonify({"success": False, "message": f"学生 {grade['student_id']} 的期末成绩必须在0-100之间"}), 400
+                except (ValueError, TypeError):
+                    return jsonify({"success": False, "message": f"学生 {grade['student_id']} 的期末成绩必须是有效数字"}), 400
+            
             # Get course_selection_id
             cursor.execute('''
                 SELECT id FROM course_selection
@@ -540,18 +562,18 @@ def update_grades():
                     UPDATE score_record
                     SET usual_score = %s, final_score = %s
                     WHERE course_selection_id = %s
-                ''', (grade['usual_score'], grade['final_score'], cs_result['id']))
+                ''', (usual_score, final_score, cs_result['id']))
             else:
                 # Insert new record
                 cursor.execute('''
                     INSERT INTO score_record (course_selection_id, usual_score, final_score)
                     VALUES (%s, %s, %s)
-                ''', (cs_result['id'], grade['usual_score'], grade['final_score']))
+                ''', (cs_result['id'], usual_score, final_score))
 
         conn.commit()
         cursor.close()
         conn.close()
-        return jsonify({"success": True, "message": "Grades updated successfully"})
+        return jsonify({"success": True, "message": "成绩更新成功"})
     except Exception as e:
         return handle_error(e)
 
@@ -756,9 +778,9 @@ def get_all_semesters():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-            SELECT DISTINCT semester 
-            FROM class
-            ORDER BY semester DESC
+            SELECT semester_id as semester, is_current, created_at
+            FROM semester
+            ORDER BY semester_id DESC
         ''')
         semesters = cursor.fetchall()
         cursor.close()
@@ -784,14 +806,19 @@ def create_semester():
         cursor = conn.cursor(dictionary=True)
         
         # 检查学期是否已存在
-        cursor.execute("SELECT 1 FROM class WHERE semester = %s LIMIT 1", [semester])
+        cursor.execute("SELECT 1 FROM semester WHERE semester_id = %s", [semester])
         if cursor.fetchone():
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "该学期已存在"}), 400
         
-        # 新学期的创建不需要在数据库中特别操作
-        # 它将在添加该学期的课程时自动创建
+        # 添加新学期
+        cursor.execute('''
+            INSERT INTO semester (semester_id, is_current)
+            VALUES (%s, FALSE)
+        ''', [semester])
+        
+        conn.commit()
         cursor.close()
         conn.close()
         
@@ -961,6 +988,105 @@ def admin_users():
     except Exception as e:
         return handle_error(e)
 
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+def delete_user(user_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 检查用户是否存在
+        cursor.execute("SELECT role FROM login_info WHERE user_id = %s", [user_id])
+        user = cursor.fetchone()
+        
+        if not user:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "用户不存在"}), 404
+        
+        role = user['role']
+        
+        # 检查删除限制
+        if role == 'student':
+            # 检查学生是否有选课记录
+            cursor.execute('''
+                SELECT cs.id 
+                FROM student s
+                JOIN course_selection cs ON s.student_id = cs.student_id
+                WHERE s.user_id = %s
+                LIMIT 1
+            ''', [user_id])
+            
+            if cursor.fetchone():
+                cursor.close()
+                conn.close()
+                return jsonify({
+                    "success": False, 
+                    "message": "无法删除该学生账号，该学生有选课记录。需要先删除所有选课记录。"
+                }), 400
+                
+            # 获取学生ID用于删除学生记录
+            cursor.execute("SELECT student_id FROM student WHERE user_id = %s", [user_id])
+            student = cursor.fetchone()
+            if student:
+                student_id = student['student_id']
+                # 删除学生记录
+                cursor.execute("DELETE FROM student WHERE student_id = %s", [student_id])
+        
+        elif role == 'teacher':
+            # 检查教师是否有课程安排
+            cursor.execute('''
+                SELECT cl.course_id 
+                FROM teacher t
+                JOIN class cl ON t.staff_id = cl.staff_id
+                WHERE t.user_id = %s
+                LIMIT 1
+            ''', [user_id])
+            
+            if cursor.fetchone():
+                cursor.close()
+                conn.close()
+                return jsonify({
+                    "success": False, 
+                    "message": "无法删除该教师账号，该教师有课程安排。需要先删除所有课程安排。"
+                }), 400
+            
+            # 获取教师ID用于删除教师记录
+            cursor.execute("SELECT staff_id FROM teacher WHERE user_id = %s", [user_id])
+            teacher = cursor.fetchone()
+            if teacher:
+                staff_id = teacher['staff_id']
+                # 删除教师记录
+                cursor.execute("DELETE FROM teacher WHERE staff_id = %s", [staff_id])
+                
+        elif role == 'admin':
+            # 检查是否为最后一个admin账号
+            cursor.execute("SELECT COUNT(*) as count FROM login_info WHERE role = 'admin'")
+            result = cursor.fetchone()
+            if result and result['count'] <= 1:
+                cursor.close()
+                conn.close()
+                return jsonify({
+                    "success": False, 
+                    "message": "无法删除最后一个管理员账号"
+                }), 400
+            
+            # 删除admin记录
+            cursor.execute("DELETE FROM admin WHERE user_id = %s", [user_id])
+        
+        # 删除login_info中的记录
+        cursor.execute("DELETE FROM login_info WHERE user_id = %s", [user_id])
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True, 
+            "message": f"用户已成功删除"
+        })
+    except Exception as e:
+        return handle_error(e)
+
 # Add stored procedure for grade calculation
 @app.route('/api/admin/setup/procedures', methods=['POST'])
 def setup_procedures():
@@ -1026,6 +1152,92 @@ def calculate_grades():
             "success": True,
             "message": "Grades calculated successfully",
             "data": results
+        })
+    except Exception as e:
+        return handle_error(e)
+
+# 添加设置当前学期的API
+@app.route('/api/admin/semesters/current', methods=['PUT'])
+def set_current_semester():
+    try:
+        data = request.get_json()
+        semester = data.get('semester')
+        
+        if not semester:
+            return jsonify({"success": False, "message": "学期名称不能为空"}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 检查学期是否存在
+        cursor.execute("SELECT 1 FROM semester WHERE semester_id = %s", [semester])
+        if not cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "该学期不存在"}), 400
+        
+        # 先将所有学期设为非当前
+        cursor.execute("UPDATE semester SET is_current = FALSE")
+        
+        # 设置当前学期
+        cursor.execute("UPDATE semester SET is_current = TRUE WHERE semester_id = %s", [semester])
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True, 
+            "message": f"学期 {semester} 已设置为当前学期"
+        })
+    except Exception as e:
+        return handle_error(e)
+
+@app.route('/api/admin/courses/<course_id>', methods=['DELETE'])
+def delete_course(course_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 检查课程是否存在
+        cursor.execute("SELECT * FROM course WHERE course_id = %s", [course_id])
+        course = cursor.fetchone()
+        
+        if not course:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "课程不存在"}), 404
+        
+        # 检查是否有班级使用该课程
+        cursor.execute("SELECT 1 FROM class WHERE course_id = %s LIMIT 1", [course_id])
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({
+                "success": False, 
+                "message": "无法删除该课程，已有教师使用该课程。请先移除所有相关的课程安排。"
+            }), 400
+        
+        # 检查是否有选课记录使用该课程
+        cursor.execute("SELECT 1 FROM course_selection WHERE course_id = %s LIMIT 1", [course_id])
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({
+                "success": False, 
+                "message": "无法删除该课程，已有学生选择该课程。请先移除所有相关的选课记录。"
+            }), 400
+        
+        # 删除课程
+        cursor.execute("DELETE FROM course WHERE course_id = %s", [course_id])
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True, 
+            "message": f"课程 {course_id} 已成功删除"
         })
     except Exception as e:
         return handle_error(e)
