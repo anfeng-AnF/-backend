@@ -34,7 +34,7 @@ else:
 DB_CONFIG = {
     'host': 'localhost',
     'user': 'root',
-    'password': '123456',
+    'password': '3149550729_AnF',
     'database': 'course_selection_system'
 }
 
@@ -274,6 +274,7 @@ def search_courses():
         courses = cursor.fetchall()
         cursor.close()
         conn.close()
+        print(query,courses)
         
         return jsonify({"success": True, "data": courses})
     except Exception as e:
@@ -718,6 +719,7 @@ def admin_courses():
             return jsonify({"success": True, "message": "Course added successfully"})
             
     except Exception as e:
+        print(e)
         return handle_error(e)
 
 @app.route('/api/admin/departments', methods=['GET'])
@@ -960,6 +962,7 @@ def admin_users():
             return jsonify({"success": True, "message": "User added successfully"})
             
     except Exception as e:
+        print("error:/api/admin/users")
         return handle_error(e)
 
 # Add stored procedure for grade calculation
@@ -1056,3 +1059,5 @@ def serve_static(path):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
+
