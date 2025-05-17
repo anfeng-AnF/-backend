@@ -1,1 +1,52 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><link rel="icon" href="/favicon.ico"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="apple-touch-icon" href="/logo192.png"/><link rel="manifest" href="/manifest.json"/><title>React App</title><script defer="defer" src="/static/js/main.80728352.js"></script><link href="/static/css/main.f855e6bc.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div></body></html>
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="Web site created using create-react-app" />
+  <link rel="apple-touch-icon" href="/logo192.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <title>React App</title>
+  <script defer="defer" src="/static/js/main.06f68b79.js"></script>
+  <link href="/static/css/main.f855e6bc.css" rel="stylesheet">
+</head>
+
+<body>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+
+  <div id="live2d-widget"></div>
+
+  <!-- ✅ 加载看板娘 -->
+  <script src="https://cdn.jsdelivr.net/npm/live2d-widget@3.1.4/lib/L2Dwidget.min.js"></script>
+  <script>
+    L2Dwidget.init({
+      model: {
+        jsonPath: "https://cdn.jsdelivr.net/gh/evrstr/live2d-widget-models/live2d_evrstr/rem/model.json", // ✅ 模型 JSON
+        scale: 1
+      },
+      display: {
+        position: "right", // left/right
+        width: 300,
+        height: 600,
+        hOffset: 0,
+        vOffset: -100
+      },
+      mobile: {
+        show: true,
+        scale: 0.5
+      },
+      react: {
+        opacityDefault: 1,
+        opacityOnHover: 0.2
+      }
+    });
+  </script>
+
+</body>
+
+
+</html>

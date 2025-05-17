@@ -712,6 +712,7 @@ def student_statistics(student_id):
 # Admin routes
 @app.route('/api/admin/courses', methods=['GET', 'POST'])
 def admin_courses():
+    print(0)
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -728,12 +729,30 @@ def admin_courses():
             return jsonify({"success": True, "data": courses})
         
         elif request.method == 'POST':
+            print(1)
             data = request.get_json()
+            
+            print(data)
+            # 确保学分和学时在合法范围内
+            credit = int(data['credit'])
+            credit_hours = data.get('credit_hours', credit * 10)
+            '''
+            if credit < 1:
+                credit = 1
+            elif credit > 10:
+                credit = 10
+                
+            # 确保credit_hours不超过255（假设该字段为TINYINT）
+            if credit_hours > 255:
+                credit_hours = 255
+            elif credit_hours < 1:
+                credit_hours = 10
+                '''
+            
             cursor.execute('''
                 INSERT INTO course (course_id, course_name, credit, credit_hours, dept_id)
                 VALUES (%s, %s, %s, %s, %s)
-            ''', (data['course_id'], data['course_name'], data['credit'], 
-                 data.get('credit_hours', data['credit'] * 10), data['dept_id']))
+            ''', (data['course_id'], data['course_name'], credit, credit_hours, data['dept_id']))
             
             conn.commit()
             cursor.close()
@@ -741,7 +760,6 @@ def admin_courses():
             return jsonify({"success": True, "message": "Course added successfully"})
             
     except Exception as e:
-        print(e)
         return handle_error(e)
 
 @app.route('/api/admin/departments', methods=['GET'])
@@ -971,16 +989,26 @@ def admin_users():
             
             # Insert into role-specific table
             if data['role'] == 'student':
+                # 确保学生ID不超过8个字符
+                student_id = data.get('student_id', f'S{user_id}')
+                if len(student_id) > 8:
+                    student_id = student_id[:8]
+                
                 cursor.execute('''
                     INSERT INTO student (user_id, student_id, name, dept_id, sex, date_of_birth, status)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ''', (user_id, data.get('student_id', f'S{user_id}'), data['name'], 
+                ''', (user_id, student_id, data['name'], 
                       data['dept_id'], data.get('sex', 'M'), data.get('date_of_birth', '2000-01-01'), 'active'))
             elif data['role'] == 'teacher':
+                # 确保教师ID不超过8个字符
+                staff_id = data.get('staff_id', f'T{user_id}')
+                if len(staff_id) > 8:
+                    staff_id = staff_id[:8]
+                    
                 cursor.execute('''
                     INSERT INTO teacher (user_id, staff_id, name, dept_id, sex, date_of_birth)
                     VALUES (%s, %s, %s, %s, %s, %s)
-                ''', (user_id, data.get('staff_id', f'T{user_id}'), data['name'], 
+                ''', (user_id, staff_id, data['name'], 
                       data['dept_id'], data.get('sex', 'M'), data.get('date_of_birth', '1980-01-01')))
             
             conn.commit()
@@ -989,7 +1017,6 @@ def admin_users():
             return jsonify({"success": True, "message": "User added successfully"})
             
     except Exception as e:
-        print("error:/api/admin/users")
         return handle_error(e)
 
 @app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
@@ -1221,6 +1248,7 @@ def set_current_semester():
 
 @app.route('/api/admin/courses/<course_id>', methods=['DELETE'])
 def delete_course(course_id):
+    print(2)
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
